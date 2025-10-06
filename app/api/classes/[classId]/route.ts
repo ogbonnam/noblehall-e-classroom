@@ -34,15 +34,15 @@ import { verifyToken } from "@/lib/auth";
 export const runtime = "nodejs";
 
 /**
- * GET /api/classes/[classId]
- * Note: context.params is a Promise<{ classId: string }> in this Next version.
+ * Note: Next's route handler context.params is Promise<{ classId: string }>
+ * so all handlers use: context: { params: Promise<{ classId: string }> }
  */
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ classId: string }> }
 ) {
   try {
-    // Await the context.params promise and extract classId
     const { classId } = await context.params;
 
     const cls = await prisma.class.findUnique({
@@ -61,10 +61,6 @@ export async function GET(
   }
 }
 
-
-// app/api/classes/[classId]/route.ts
-
-
 function extractTokenFromHeadersOrCookie(headers: Headers) {
   const auth = headers.get("authorization") || "";
   if (auth.startsWith("Bearer ")) return auth.split(" ")[1];
@@ -77,9 +73,12 @@ function extractTokenFromHeadersOrCookie(headers: Headers) {
   return null;
 }
 
-export async function PATCH(req: Request, { params }: { params: { classId: string | Promise<string> } }) {
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ classId: string }> }
+) {
   try {
-    const { classId } = (await params) as { classId: string };
+    const { classId } = await context.params;
 
     const token = extractTokenFromHeadersOrCookie(req.headers);
     if (!token) return NextResponse.json({ error: "Unauthorized - no token" }, { status: 401 });
@@ -112,9 +111,12 @@ export async function PATCH(req: Request, { params }: { params: { classId: strin
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: { classId: string | Promise<string> } }) {
+export async function DELETE(
+  req: Request,
+  context: { params: Promise<{ classId: string }> }
+) {
   try {
-    const { classId } = (await params) as { classId: string };
+    const { classId } = await context.params;
 
     const token = extractTokenFromHeadersOrCookie(req.headers);
     if (!token) return NextResponse.json({ error: "Unauthorized - no token" }, { status: 401 });
@@ -130,16 +132,13 @@ export async function DELETE(req: Request, { params }: { params: { classId: stri
     }
 
     // Delete files on disk for each resource and submission
-    // resources.filePath references e.g. /uploads/filename
     for (const res of cls.resources || []) {
       try {
-        // delete resource file
         if (res.filePath) {
           const filePath = path.join(process.cwd(), "public", res.filePath.replace(/^\//, ""));
           if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
 
-        // find submissions for this resource and delete submission files
         const subs = await prisma.submission.findMany({ where: { resourceId: res.id } });
         for (const s of subs) {
           try {
@@ -156,7 +155,7 @@ export async function DELETE(req: Request, { params }: { params: { classId: stri
       }
     }
 
-    // Delete DB rows in a transaction (order: submissions, resourceViews, resources, enrollments, class)
+    // Delete DB rows in a transaction
     await prisma.$transaction([
       prisma.submission.deleteMany({ where: { resource: { classId } } as any }),
       prisma.resourceView.deleteMany({ where: { resource: { classId } } as any }),
