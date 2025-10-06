@@ -1,19 +1,31 @@
+// 
+
 // app/api/resources/[resourceId]/submission-status/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 
-export async function GET(req: Request, { params }: { params: { resourceId: string | Promise<string> } }) {
+/**
+ * GET /api/resources/[resourceId]/submission-status
+ * Note: Next's route handler context.params is a Promise<{ resourceId: string }>
+ */
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ resourceId: string }> }
+) {
   try {
-    const { resourceId } = (await params) as { resourceId: string };
+    const { resourceId } = await context.params;
 
     // token from Authorization header OR cookie
-    const auth = req.headers.get("authorization") || "";
+    const auth = request.headers.get("authorization") || "";
     let token: string | null = null;
     if (auth.startsWith("Bearer ")) token = auth.split(" ")[1];
     else {
-      const cookie = req.headers.get("cookie") || "";
-      const m = cookie.split(";").map(s => s.trim()).find(s => s.startsWith("token="));
+      const cookie = request.headers.get("cookie") || "";
+      const m = cookie
+        .split(";")
+        .map((s) => s.trim())
+        .find((s) => s.startsWith("token="));
       if (m) token = m.split("=")[1];
     }
 
