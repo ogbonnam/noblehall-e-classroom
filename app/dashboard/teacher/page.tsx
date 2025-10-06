@@ -9,6 +9,7 @@ import RecentActivity from "@/components/RecentActivity";
 import Header from "@/components/Header";
 import { PlusCircle, Calendar, Users, TrendingUp } from "lucide-react";
 import RecentSubmissionsByClass from "@/components/RecentSubmissionsByClass";
+import ClassesGrid from "@/components/ClassesGrid";
 
 export default async function Dashboard() {
   // Await headers() and cookies() if your Next version returns promises
@@ -47,7 +48,7 @@ export default async function Dashboard() {
   // Now fetch classes directly with Prisma
   const classes = await prisma.class.findMany({
     where: { teacherId: user.id },
-    select: { id: true, title: true, term: true, subterm: true },
+    select: { id: true, title: true, term: true, subterm: true, teacherId: true },
     orderBy: { createdAt: "desc" },
   });
 
@@ -59,6 +60,41 @@ export default async function Dashboard() {
     ];
     return colors[parseInt(id, 16) % colors.length];
   };
+
+  // Now fetch classes directly with Prisma (basic fields + enrollments count)
+  const classesRaw = await prisma.class.findMany({
+    where: { teacherId: user.id },
+    select: {
+      id: true,
+      title: true,
+      term: true,
+      subterm: true,
+      teacherId: true,
+      _count: { select: { enrollments: true } }, // this gives student count
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // For each class compute assignment/homework resource count (parallel)
+  const classesWithCounts = await Promise.all(
+    classesRaw.map(async (c) => {
+      const assignmentCount = await prisma.resource.count({
+        where: {
+          classId: c.id,
+          OR: [{ type: "ASSIGNMENT" }, { type: "HOMEWORK" }],
+        },
+      });
+      return {
+        id: c.id,
+        title: c.title,
+        term: c.term,
+        subterm: c.subterm,
+        teacherId: c.teacherId,
+        studentCount: c._count?.enrollments ?? 0,
+        assignmentCount,
+      };
+    })
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
@@ -86,12 +122,12 @@ export default async function Dashboard() {
             value={classes.filter(c => c.term === "Current").length}
             color="bg-green-500"
           /> */}
-          <QuickStats 
+          {/* <QuickStats 
             icon={<TrendingUp className="h-6 w-6" />}
             title="Student Engagement"
             value="87%"
             color="bg-purple-500"
-          />
+          /> */}
         </div>
 
         {/* Classes Section */}
@@ -123,17 +159,16 @@ export default async function Dashboard() {
               </a>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {classes.map((c) => (
-                <ClassCard 
-                  key={c.id}
-                  id={c.id}
-                  title={c.title}
-                  term={c.term}
-                  subterm={c.subterm || undefined} // Convert null to undefined
-                  color={getClassColor(c.id)}
-                />
-              ))}
+            <div className="">
+                {classes.length === 0 ? (
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center">
+                    {/* No classes UI */}
+                  </div>
+                ) : (
+                  // <ClassesGrid classes={classes} userRole={user.role} userId={user.id} />
+                  <ClassesGrid classes={classesWithCounts} userRole={user.role} userId={user.id} />
+
+                )}
             </div>
           )}
         </div>
