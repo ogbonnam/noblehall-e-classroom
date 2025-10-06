@@ -1,0 +1,118 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+
+  // relations
+  classes   Class[]      @relation("teacherClasses")
+  enrolls   Enrollment[]
+  submissions   Submission[]    // one-to-many relation: a user can have many submissions
+  resourceViews ResourceView[]   // one-to-many relation: a user can have many resource views
+}
+
+model Class {
+  id         String       @id @default(cuid())
+  title      String
+  term       String       // e.g. AUTUMN, SPRING, SUMMER (use uppercase)
+  subterm    String?      // e.g. AUTUMN MID TERM
+  code       String       @unique
+  teacherId  String
+  createdAt  DateTime     @default(now())
+
+  teacher    User         @relation("teacherClasses", fields: [teacherId], references: [id])
+  resources  Resource[]
+  enrollments Enrollment[]
+}
+
+enum ResourceType {
+  NOTE
+  VIDEO
+  ASSIGNMENT
+  HOMEWORK
+}
+
+model Resource {
+  id        String   @id @default(cuid())
+  title     String
+  filePath  String   // local path under /public/uploads/...
+  mimeType  String
+  size      Int
+  type      ResourceType
+  classId   String
+  uploadedAt DateTime @default(now())
+
+  // assignment/homework specific (nullable)
+  dueAt      DateTime?    // for ASSIGNMENT/HOMEWORK
+  points     Int?         // optional max points
+
+  class     Class    @relation(fields: [classId], references: [id])
+  submissions Submission[]
+  views      ResourceView[]
+}
+
+model Submission {
+  id          String   @id @default(cuid())
+  resourceId  String
+  studentId   String
+  filePath    String
+  mimeType    String
+  size        Int
+  createdAt   DateTime @default(now())
+  comment     String?
+  graded      Boolean  @default(false)
+  grade       Int?
+
+  resource    Resource @relation(fields: [resourceId], references: [id])
+  student     User     @relation(fields: [studentId], references: [id])
+
+  @@unique([resourceId, studentId]) // one submission per student per assignment by default
+}
+
+model ResourceView {
+  id         String   @id @default(cuid())
+  resourceId String
+  userId     String
+  openedAt   DateTime @default(now())
+
+  resource   Resource @relation(fields: [resourceId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([resourceId, userId])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  classId   String
+  joinedAt  DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  class     Class    @relation(fields: [classId], references: [id])
+
+  @@unique([userId, classId])
+}
+
