@@ -30,10 +30,12 @@ function getMimeType(filename: string): string {
  */
 export async function GET(
   request: Request,
-  { params }: { params: { slug: string[] } }
+  // FIX: Change the type of context.params from Promise<{ slug: string[] }> to the synchronous structure 
+  // expected by the Next.js App Router: { params: { slug: string[] } }
+  context: { params: { slug: string[] } }
 ) {
   // The filename (e.g., "1700000000-document-name.pdf") will be the first item in the slug array
-  const filename = params.slug.join('/'); 
+  const filename = context.params.slug.join('/'); 
   
   // Construct the absolute path on the container's file system
   const filePath = path.join(PERSISTENT_DIR, filename);
