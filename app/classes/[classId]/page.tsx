@@ -228,6 +228,48 @@ export default function ClassPage({ params }: ClassPageProps) {
     setCurrentPage(1);
   };
 
+  // inside ClassPage component
+
+const handleDeleteResource = async (resourceId: string, resourceTitle?: string) => {
+  // simple confirmation — you can replace with a modal/toast UI if preferred
+  const ok = confirm(`Delete "${resourceTitle ?? "this resource"}"? This will permanently remove the file and record.`);
+  if (!ok) return;
+
+  // optimistic UI: remove locally immediately (keeps UI snappy)
+  const previousCls = cls;
+  try {
+    setCls((prev: any) =>
+      prev ? { ...prev, resources: prev.resources.filter((r: any) => r.id !== resourceId) } : prev
+    );
+
+    // call delete endpoint; cookies are sent by credentials: "include"
+    const res = await fetch(`/api/resources/${resourceId}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      // rollback optimistic change on failure
+      setCls(previousCls);
+      const msg = data?.error || "Failed to delete resource";
+      alert(msg);
+      return;
+    }
+
+    // success — refresh list from server (optional)
+    // This ensures related counts/stats are accurate
+    setRefreshKey((k) => k + 1);
+  } catch (err) {
+    console.error("Delete failed", err);
+    // rollback optimistic change
+    setCls(previousCls);
+    alert("Failed to delete resource. Try again.");
+  }
+};
+
+
   // Calculate pagination
   const resources = cls?.resources || [];
   const totalResources = resources.length;
@@ -463,10 +505,27 @@ export default function ClassPage({ params }: ClassPageProps) {
                   </div>
 
                   {/* Resources Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                     {currentResources.map((res: any) => (
-                      <div key={res.id} className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow duration-300 overflow-hidden">
+                      <div
+                        key={res.id}
+                        className="relative bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow duration-300 overflow-hidden"
+                      >
+                        {/* Delete button - top-right circular red X (visible to teachers/admins) */}
+                        {canUpload && (
+                          <button
+                            onClick={() => handleDeleteResource(res.id, res.title)}
+                            title="Delete resource"
+                            className="absolute top-3 right-3 z-20 flex items-center justify-center w-8 h-8 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors shadow-md"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                              <path fillRule="evenodd" d="M10 8.586l3.95-3.95a1 1 0 111.414 1.415L11.414 10l3.95 3.95a1 1 0 01-1.414 1.414L10 11.414l-3.95 3.95a1 1 0 01-1.414-1.414L8.586 10l-3.95-3.95a1 1 0 011.414-1.414L10 8.586z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        )}
+
                         <div className={`h-2 ${res.type === "ASSIGNMENT" ? "bg-red-500" : res.type === "HOMEWORK" ? "bg-orange-500" : res.type === "NOTE" ? "bg-green-500" : res.type === "VIDEO" ? "bg-purple-500" : "bg-indigo-500"}`}></div>
+
                         <div className="p-6">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center">
@@ -497,43 +556,43 @@ export default function ClassPage({ params }: ClassPageProps) {
                               </div>
                             </div>
                           </div>
-                          
-                          <div className="">
-                           
+
+                          <div>
                             {/* Actions area inside each resource card */}
-                              <div className="bg-gray-50 rounded-b-xl p-4 mt-4">
-                                {/* Actions area inside each resource card */}
-                                <div className="flex items-center justify-between">
-                                  {/* Main Action: View (styled as a button) */}
-                                  <a
-                                    href={res.filePath}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg text-sm transition-all duration-200 shadow-sm"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                    </svg>
-                                    Open File
-                                  </a>
+                            <div className="bg-gray-50 rounded-b-xl p-4 mt-4">
+                              {/* Actions area inside each resource card */}
+                              <div className="flex items-center justify-between">
+                                {/* Main Action: View (styled as a button) */}
+                                <a
+                                  href={res.filePath}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg text-sm transition-all duration-200 shadow-sm"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                  Open File
+                                </a>
 
-                                  {/* Conditional Actions */}
-                                  <div className="flex items-center space-x-3">
-                                    {/* Student: Submit Button with Gradient */}
-                                    {user && user.role === "STUDENT" && (res.type === "ASSIGNMENT" || res.type === "HOMEWORK") && (
-                                      <button
-                                        className="inline-flex items-center bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-                                        onClick={() => setSubmittingResource(res)}
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Submit
-                                      </button>
-                                    )}
+                                {/* Conditional Actions */}
+                                <div className="flex items-center space-x-3">
+                                  {/* Student: Submit Button with Gradient */}
+                                  {user && user.role === "STUDENT" && (res.type === "ASSIGNMENT" || res.type === "HOMEWORK") && (
+                                    <button
+                                      className="inline-flex items-center bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+                                      onClick={() => setSubmittingResource(res)}
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      Submit
+                                    </button>
+                                  )}
 
-                                    {/* Teacher/Admin: Toggle Submissions Panel */}
-                                    {canUpload && (res.type === "ASSIGNMENT" || res.type === "HOMEWORK") && (
+                                  {/* Teacher/Admin: Toggle Submissions Panel */}
+                                  {canUpload && (res.type === "ASSIGNMENT" || res.type === "HOMEWORK") && (
+                                    <>
                                       <button
                                         onClick={() => setOpenSubmissionsFor(openSubmissionsFor === res.id ? null : res.id)}
                                         className={`inline-flex items-center font-medium py-2.5 px-4 rounded-lg text-sm transition-all duration-200 ${
@@ -548,10 +607,11 @@ export default function ClassPage({ params }: ClassPageProps) {
                                         </svg>
                                         {openSubmissionsFor === res.id ? "Hide" : "Submissions"}
                                       </button>
-                                    )}
-                                  </div>
+                                    </>
+                                  )}
                                 </div>
                               </div>
+                            </div>
 
                             {/* After that button (still inside the mapping), conditionally render panel */}
                             {canUpload && openSubmissionsFor === res.id && (
@@ -559,15 +619,12 @@ export default function ClassPage({ params }: ClassPageProps) {
                                 <TeacherSubmissionsPanel resourceId={res.id} refreshKey={refreshKey} initialPageSize={2} />
                               </div>
                             )}
-
                           </div>
-                          
                         </div>
-                        
                       </div>
-                      
                     ))}
                   </div>
+
                    
                   {/* Pagination */}
                   {totalPages > 1 && (
