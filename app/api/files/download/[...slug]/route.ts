@@ -3,14 +3,12 @@ import { NextResponse, NextRequest } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-// MUST match the path used in the POST route and Coolify volume mount
 const PERSISTENT_DIR = process.env.UPLOAD_STORAGE_PATH ?? "/app/persistent_uploads";
-
 export const runtime = "nodejs";
 
 function getMimeType(filename: string): string {
-  const extension = path.extname(filename).toLowerCase();
-  switch (extension) {
+  const ext = path.extname(filename).toLowerCase();
+  switch (ext) {
     case '.pdf': return 'application/pdf';
     case '.png': return 'image/png';
     case '.jpg':
@@ -24,21 +22,30 @@ function getMimeType(filename: string): string {
 }
 
 /**
- * GET /api/files/download/[...slug]
- * example request: GET /api/files/download/1700000000-document.pdf
+ * Make the context param flexible so this file builds with different Next.js typings:
+ * context.params may be either a plain object { slug: string[] } or a Promise<{ slug: string[] }>.
  */
+type RouteContext =
+  { params: { slug: string[] } }
+  | { params: Promise<{ slug: string[] }> };
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string[] } }
+  context: RouteContext
 ) {
-  const filename = params.slug.join('/');
+  // Await context.params — works whether it's a Promise or a plain object
+  const resolved = await (context as any).params as { slug: string[] };
+  const filename = resolved.slug.join('/');
   const filePath = path.join(PERSISTENT_DIR, filename);
 
   try {
     const fileBuffer = await fs.readFile(filePath); // Node Buffer
     const mimeType = getMimeType(filename);
 
-    return new NextResponse(new Uint8Array(fileBuffer), {
+    // Convert to Uint8Array so TS accepts it as BodyInit
+    const body = new Uint8Array(fileBuffer);
+
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': mimeType,
@@ -46,8 +53,8 @@ export async function GET(
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
-  } catch (error) {
-    console.error(`Attempted access to missing file: ${filename}`, error);
+  } catch (err) {
+    console.error(`Attempted access to missing file: ${filename}`, err);
     return NextResponse.json({ error: 'File not found.' }, { status: 404 });
   }
 }
